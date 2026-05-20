@@ -5,8 +5,10 @@ const https = require('https');
 const http = require('http');
 const crypto = require('crypto');
 
-// 解决 macOS sandbox 权限问题
-app.commandLine.appendSwitch('no-sandbox');
+// 解决 macOS sandbox 权限问题（仅打包后需要）
+if (app.isPackaged) {
+  app.commandLine.appendSwitch('no-sandbox');
+}
 
 // 数据存储路径
 const dataPath = path.join(app.getPath('userData'), 'buji-data.json');
@@ -33,7 +35,7 @@ function createWindow() {
     transparent: true,
     alwaysOnTop: true,
     resizable: true,
-    skipTaskbar: true,
+    skipTaskbar: process.platform === 'darwin', // Mac 隐藏 Dock；Windows 保留任务栏图标
     hasShadow: false,       // 我们用 CSS 自带阴影，更柔和
     titleBarStyle: 'hidden',
     trafficLightPosition: { x: -100, y: -100 }, // 隐藏红绿灯
@@ -63,12 +65,21 @@ function createWindow() {
 }
 
 function createTray() {
-  // 用一个小图标放在菜单栏，点击可以显示/隐藏
-  const icon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaklEQVQ4T2NkoBAwUqifgWoGMP7//38DEBsQ4wImIN0AxP+JMQSoeTMQXyDGEBCdi8QGGYKsB0UfuiGbQRqxGYJiAC5DQIYg64czBN0QrIagG0KUIcimEjSAmABD1ousB10fLkOwphMAAN3dMBFfHQxqAAAAAElFTkSuQmCC'
-  );
+  // 用应用图标放在菜单栏/系统托盘
+  let icon;
+  const iconPath = path.join(__dirname, 'build', 'icon.png');
+  if (fs.existsSync(iconPath)) {
+    icon = nativeImage.createFromPath(iconPath);
+  } else {
+    // fallback: 内嵌小图标
+    icon = nativeImage.createFromDataURL(
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaklEQVQ4T2NkoBAwUqifgWoGMP7//38DEBsQ4wImIN0AxP+JMQSoeTMQXyDGEBCdi8QGGYKsB0UfuiGbQRqxGYJiAC5DQIYg64czBN0QrIagG0KUIcimEjSAmABD1ousB10fLkOwphMAAN3dMBFfHQxqAAAAAElFTkSuQmCC'
+    );
+  }
 
-  tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  // macOS 菜单栏需要小图标（16-22px），Windows 托盘需要稍大的
+  const size = process.platform === 'darwin' ? 18 : 24;
+  tray = new Tray(icon.resize({ width: size, height: size }));
   tray.setToolTip('不记Todo');
 
   const contextMenu = Menu.buildFromTemplate([
@@ -564,6 +575,10 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    // macOS：隐藏 Dock 图标，仅通过菜单栏图标操作
+    if (process.platform === 'darwin' && app.dock) {
+      app.dock.hide();
+    }
     createWindow();
     createTray();
     startReminderScheduler();

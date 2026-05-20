@@ -1,6 +1,6 @@
 {
   "name": "buji-todo",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "不记Todo - 桌面悬浮置顶待办工具",
   "main": "main.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "dist": "electron-builder --mac"
   },
   "keywords": ["todo", "desktop", "always-on-top"],
-  "author": "yexinyu04",
+  "author": "yexinyu <y1416154606@163.com>",
   "license": "MIT",
   "type": "commonjs",
   "build": {
@@ -42,7 +42,8 @@
       "app.js",
       "style.css",
       "cat-reminder.html",
-      "assets/**/*"
+      "assets/**/*",
+      "build/icon.png"
     ],
     "directories": {
       "output": "dist"
