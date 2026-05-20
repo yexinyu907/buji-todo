@@ -1,0 +1,55 @@
+{
+  "name": "buji-todo",
+  "version": "0.6.0",
+  "description": "不记Todo - 桌面悬浮置顶待办工具",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "pack": "electron-builder --mac --dir",
+    "dist": "electron-builder --mac"
+  },
+  "keywords": ["todo", "desktop", "always-on-top"],
+  "author": "yexinyu04",
+  "license": "MIT",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.yexinyu.buji-todo",
+    "productName": "不记Todo",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
+      "target": [
+        {
+          "target": "zip",
+          "arch": "universal"
+        }
+      ]
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "app.js",
+      "style.css",
+      "cat-reminder.html",
+      "assets/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "devDependencies": {
+    "electron": "^41.5.0",
+    "electron-builder": "^26.0.12"
+  }
+}

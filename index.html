@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>不记Todo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部 -->
+    <div class="header">
+      <div class="header-left">
+        <div class="window-controls">
+          <button class="win-btn close" id="btn-close" title="关闭"></button>
+          <button class="win-btn minimize" id="btn-minimize" title="最小化"></button>
+          <button class="win-btn pin pinned" id="btn-pin" title="置顶"></button>
+        </div>
+        <span class="greeting" id="greeting"></span>
+      </div>
+      <div class="header-right">
+        <span class="header-stat" id="header-stat"></span>
+        <div class="sort-wrap" id="sort-wrap">
+          <button class="btn-sort" id="btn-sort" title="切换排序">默认</button>
+          <div class="sort-menu hidden" id="sort-menu">
+            <button class="sort-opt active" data-mode="default">默认</button>
+            <button class="sort-opt" data-mode="pri-asc">优先↑</button>
+            <button class="sort-opt" data-mode="pri-desc">优先↓</button>
+            <button class="sort-opt" data-mode="ddl-asc">时间↑</button>
+            <button class="sort-opt" data-mode="ddl-desc">时间↓</button>
+            <button class="sort-opt" data-mode="tag">分类</button>
+          </div>
+        </div>
+        <div class="view-wrap" id="view-wrap">
+          <button class="btn-view" id="btn-view" title="切换视图">📋</button>
+          <div class="view-menu hidden" id="view-menu">
+            <button class="view-opt" data-mode="list">📋 列表</button>
+            <button class="view-opt" data-mode="calendar">📅 日历</button>
+            <button class="view-opt" data-mode="collapse">📌 折叠</button>
+          </div>
+        </div>
+        <button class="btn-add" id="btn-add" title="添加待办">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1.5v11M1.5 7h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 添加面板 -->
+    <div class="add-panel hidden" id="add-panel">
+      <input type="text" id="todo-input" placeholder="输入待办内容..." />
+      <div class="link-preview hidden" id="link-preview"></div>
+      <!-- 功能按钮 -->
+      <div class="opt-btns">
+        <button class="opt-btn" id="opt-pri">
+          <span class="opt-icon">◉</span> <span id="pri-text">普通</span> ▾
+        </button>
+        <button class="opt-btn" id="opt-ddl">
+          <span class="opt-icon">◷</span> 截止时间
+        </button>
+        <button class="opt-btn" id="opt-tag">
+          <span class="opt-icon">⊞</span> <span id="tag-text">标签</span>
+        </button>
+        <button class="opt-btn" id="opt-note">
+          <span class="opt-icon">✎</span> 备注
+        </button>
+      </div>
+      <!-- 展开：优先级选择（浮层） -->
+      <div class="expand-area hidden" id="exp-pri">
+        <button class="pri-opt urgent" data-p="urgent">紧急</button>
+        <button class="pri-opt important" data-p="important">重要</button>
+        <button class="pri-opt normal active" data-p="normal">普通</button>
+      </div>
+      <!-- 展开：截止时间 -->
+      <div class="expand-area hidden" id="exp-ddl">
+        <div class="qd-row">
+          <button class="qd" data-d="0">今天</button>
+          <button class="qd" data-d="1">明天</button>
+          <button class="qd" data-d="2">后天</button>
+          <button class="qd" data-d="next-mon">下周一</button>
+        </div>
+        <div class="cal-box" id="cal-box">
+          <div class="cal-head">
+            <button class="cal-n" id="cal-prev">‹</button>
+            <span id="cal-title"></span>
+            <button class="cal-n" id="cal-next">›</button>
+          </div>
+          <div class="cal-wk"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+          <div class="cal-grid" id="cal-grid"></div>
+        </div>
+        <div id="time-wheel-container"></div>
+        <div class="time-repeat-row">
+          <span class="tr-lbl">循环</span>
+          <select id="sel-repeat" class="tr-select">
+            <option value="">不循环</option>
+            <option value="daily">每天</option>
+            <option value="weekly">每周</option>
+          </select>
+        </div>
+      </div>
+      <!-- 展开：备注 -->
+      <div class="expand-area hidden" id="exp-note">
+        <input type="text" id="note-input" placeholder="补充说明..." class="note-inp" />
+      </div>
+      <!-- 展开：标签 -->
+      <div class="expand-area hidden" id="exp-tag">
+        <input type="text" id="tag-input" placeholder="输入标签名..." class="tag-inp" />
+        <div class="tag-suggestions" id="tag-suggestions"></div>
+      </div>
+      <!-- 底部操作 -->
+      <div class="add-foot">
+        <button class="foot-btn cancel" id="btn-cancel">取消</button>
+        <button class="foot-btn confirm" id="btn-confirm">添加 ↵</button>
+      </div>
+    </div>
+
+    <!-- 待办列表 -->
+    <main class="list-area" id="list-area">
+      <div class="empty" id="empty-state">
+        <span class="empty-icon">🐣</span>
+        <p>还没有待办</p>
+        <p class="empty-sub">点右上角 + 添加</p>
+      </div>
+    </main>
+
+    <!-- 日历视图 -->
+    <div class="cal-view hidden" id="cal-view">
+      <div class="cv-nav">
+        <button class="cv-nav-btn" id="cv-prev">‹</button>
+        <span class="cv-title" id="cv-title"></span>
+        <button class="cv-nav-btn" id="cv-next">›</button>
+        <button class="cv-today-btn" id="cv-today">今天</button>
+      </div>
+      <div class="cv-weekdays">
+        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+      </div>
+      <div class="cv-grid" id="cv-grid"></div>
+      <div class="cv-day-detail hidden" id="cv-day-detail">
+        <div class="cv-day-title" id="cv-day-title"></div>
+        <div class="cv-day-list" id="cv-day-list"></div>
+      </div>
+    </div>
+
+    <!-- Done 折叠区 -->
+    <div class="done-section hidden" id="done-section">
+      <div class="done-header" id="done-toggle">
+        <span>Done ✓</span>
+        <span class="done-count" id="done-count"></span>
+        <button class="done-clear-btn hidden" id="done-clear" title="清空已完成">清空</button>
+        <span class="done-arrow" id="done-arrow">▾</span>
+      </div>
+      <div class="done-list hidden" id="done-list"></div>
+    </div>
+  </div>
+
+  <!-- 编辑弹出层 -->
+  <div class="edit-overlay hidden" id="edit-overlay">
+    <div class="edit-popup" id="edit-popup"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
