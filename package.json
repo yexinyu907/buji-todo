@@ -1,6 +1,6 @@
 {
   "name": "buji-todo",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "不记Todo - 桌面悬浮置顶待办工具",
   "main": "main.js",
   "scripts": {

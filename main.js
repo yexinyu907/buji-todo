@@ -5,10 +5,8 @@ const https = require('https');
 const http = require('http');
 const crypto = require('crypto');
 
-// 解决 macOS sandbox 权限问题（仅打包后需要）
-if (app.isPackaged) {
-  app.commandLine.appendSwitch('no-sandbox');
-}
+// 解决 macOS sandbox 权限问题
+app.commandLine.appendSwitch('no-sandbox');
 
 // 数据存储路径
 const dataPath = path.join(app.getPath('userData'), 'buji-data.json');
@@ -35,7 +33,7 @@ function createWindow() {
     transparent: true,
     alwaysOnTop: true,
     resizable: true,
-    skipTaskbar: process.platform === 'darwin', // Mac 隐藏 Dock；Windows 保留任务栏图标
+    skipTaskbar: false, // Dock（Mac）和任务栏（Windows）都显示图标
     hasShadow: false,       // 我们用 CSS 自带阴影，更柔和
     titleBarStyle: 'hidden',
     trafficLightPosition: { x: -100, y: -100 }, // 隐藏红绿灯
@@ -575,10 +573,6 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
-    // macOS：隐藏 Dock 图标，仅通过菜单栏图标操作
-    if (process.platform === 'darwin' && app.dock) {
-      app.dock.hide();
-    }
     createWindow();
     createTray();
     startReminderScheduler();

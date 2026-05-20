@@ -6,8 +6,8 @@
 
 **普通用户直接下载即可，不需要懂代码：**
 
-- **Mac 用户**：下载 [不记Todo-0.6.1-universal-mac.zip](https://github.com/yexinyu907/buji-todo/releases)，解压后双击打开即可（应用图标在屏幕顶部菜单栏）
-- **Windows 用户**：下载 [不记Todo-0.6.1-win.zip](https://github.com/yexinyu907/buji-todo/releases)，解压后双击运行，无需安装
+- **Mac 用户**：下载 [不记Todo-0.6.2-universal-mac.zip](https://github.com/yexinyu907/buji-todo/releases)，解压后双击打开即可
+- **Windows 用户**：下载 [不记Todo-0.6.2-win.zip](https://github.com/yexinyu907/buji-todo/releases)，解压后双击运行，无需安装
 
 > 如果 Releases 页面还没有文件，可以联系作者获取安装包。
 
