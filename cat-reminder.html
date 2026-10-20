@@ -2,8 +2,9 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>喵提醒</title>
+  <title>不记Todo提醒</title>
   <style>
+    [hidden] { display:none !important; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { background: transparent; overflow: visible; height: 100%; }
     body { font-family: "PingFang SC", -apple-system, sans-serif; }
@@ -28,6 +29,8 @@
       filter: drop-shadow(0 2px 4px rgba(0,0,0,.15));
       pointer-events: none;
     }
+    .cat-img.custom { animation: none; }
+    .cat-img.framed { background:#fff; padding:4px; border-radius:12px; filter:none; box-shadow:0 2px 8px #0002; }
     @keyframes headTilt {
       0%, 100% { transform: rotate(0deg) scale(1); }
       25% { transform: rotate(-4deg) scale(1.03); }
@@ -124,7 +127,7 @@
 </head>
 <body>
   <div class="container" id="container">
-    <img class="cat-img" id="cat-img" src="" alt="喵~" />
+    <img class="cat-img" id="cat-img" src="" alt="提醒形象" />
     <div class="bubble" id="bubble">
       <button class="close-btn" id="close-btn" title="关闭">×</button>
       <div class="bubble-title" id="bubble-title">
@@ -155,9 +158,14 @@
     const catPath = path.join(__dirname, 'assets', 'cats', `cat${catIndex}.png`);
     document.getElementById('cat-img').src = catPath;
 
+    let isDemo = false;
     // 接收提醒内容
     ipcRenderer.on('show-reminder', (_, data) => {
       document.getElementById('bubble-text').textContent = data.text;
+      if (data.avatar) { const img=document.getElementById('cat-img'); img.src=data.avatar.src; img.classList.add('custom'); img.classList.toggle('framed',data.avatar.framed); }
+      isDemo = !!data.demo;
+      if (isDemo) document.getElementById('title-text').textContent='提醒示例';
+      if (data.demo) return;
       if (data.isOverdue) {
         document.getElementById('title-text').textContent = '已经超时啦！快去做~';
         document.getElementById('bubble-title').classList.add('overdue');
@@ -217,7 +225,7 @@
     // 完成按钮
     document.getElementById('btn-done').addEventListener('click', (e) => {
       e.stopPropagation();
-      ipcRenderer.send('reminder-action', { action: 'done' });
+      if (!isDemo) ipcRenderer.send('reminder-action', { action: 'done' });
       container.classList.add('fadeOut');
       setTimeout(() => ipcRenderer.send('close-reminder'), 350);
     });
@@ -234,7 +242,7 @@
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const min = parseInt(btn.dataset.min);
-        ipcRenderer.send('reminder-action', { action: 'delay', minutes: min });
+        if (!isDemo) ipcRenderer.send('reminder-action', { action: 'delay', minutes: min });
         container.classList.add('fadeOut');
         setTimeout(() => ipcRenderer.send('close-reminder'), 350);
       });

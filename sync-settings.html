@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'">
+  <title>设置 · 不记Todo</title>
+  <link rel="stylesheet" href="sync-settings.css">
+</head>
+<body>
+  <main>
+    <header><div><h1>设置</h1></div></header>
+    <nav class="settings-tabs" aria-label="设置分类"><button data-section="general">通用</button><button data-section="appearance">外观</button><button data-section="data">数据与提醒</button><button data-section="about">关于</button></nav>
+    <div id="settings-message" class="notice" role="status" hidden></div>
+    <div data-settings-page="general" hidden>
+      <section><h2>启动与窗口</h2>
+        <label class="setting-row"><span>开机启动</span><input type="checkbox" id="pref-login"></label>
+        <label class="setting-row"><span>关闭窗口时</span><select id="pref-close"><option value="hide">隐藏到菜单栏，继续运行</option><option value="quit">退出应用</option></select></label>
+      </section>
+      <section><h2>显示／隐藏窗口快捷键</h2><div class="shortcut-row"><output id="shortcut-value">未设置</output><button id="record-shortcut" aria-label="设置显示／隐藏窗口快捷键">设置</button><button id="clear-shortcut" class="quiet">清除</button></div></section>
+    </div>
+    <div data-settings-page="appearance" hidden>
+      <section><h2>阅读与显示</h2>
+        <label class="appearance-control" for="pref-font"><span>待办字号</span><output id="font-value">100%</output><div class="range-control"><span class="range-small">A</span><input type="range" id="pref-font" min="80" max="160" step="1"><span class="range-large">A</span></div></label>
+        <label class="appearance-control" for="pref-density"><span>卡片间距</span><output id="spacing-value">30</output><div class="range-control"><span>紧凑</span><input type="range" id="pref-density" min="0" max="100" step="1"><span>宽松</span></div></label>
+        <div class="appearance-control color-control"><span id="color-label">窗口底色</span><div></div>
+          <div id="color-presets" class="color-presets" role="group" aria-label="背景颜色"><button class="color-preset" data-color="#faf9f6" aria-label="原色" title="原色" aria-pressed="false"></button><button class="color-preset" data-color="#f2f4f7" aria-label="雾灰" title="雾灰" aria-pressed="false"></button><button class="color-preset" data-color="#fff4dc" aria-label="浅杏" title="浅杏" aria-pressed="false"></button><button class="color-preset" data-color="#edf5ee" aria-label="浅绿" title="浅绿" aria-pressed="false"></button><button class="color-preset" data-color="#eaf2fa" aria-label="浅蓝" title="浅蓝" aria-pressed="false"></button><button class="color-preset" data-color="#f1edf8" aria-label="浅紫" title="浅紫" aria-pressed="false"></button><button class="color-preset" data-color="#faedf0" aria-label="浅粉" title="浅粉" aria-pressed="false"></button><button id="custom-color" class="color-preset" aria-label="自定义颜色" title="自定义颜色" aria-pressed="false" aria-expanded="false" aria-controls="custom-color-picker">＋</button></div>
+          <div id="custom-color-picker" class="custom-color-picker" hidden><button id="reset-color" class="text-button">重置</button>
+          <div id="color-board" class="color-board" role="group" aria-label="拖动选择饱和度与明暗"><span id="color-cursor" class="color-cursor" aria-hidden="true"></span></div>
+          <div class="color-tools"><span id="current-color" class="current-color" aria-hidden="true"></span><label class="hue-control"><span class="sr-only">色相</span><input type="range" id="color-hue" min="0" max="359" step="1" aria-label="色相"></label><input id="color-hex" type="text" aria-label="十六进制背景色" spellcheck="false" autocomplete="off" maxlength="7" placeholder="#FAF9F6"></div>
+
+          <span id="color-error" class="color-error" role="status" hidden>请输入 #RRGGBB 格式的颜色。</span>
+          </div>
+        </div>
+        <label class="appearance-control" for="pref-opacity"><span>背景不透明度</span><output id="opacity-value">100%</output><div class="range-control"><span>70%</span><input type="range" id="pref-opacity" min="70" max="100" step="1"><span>100%</span></div></label>
+
+      </section>
+    </div>
+    <div data-settings-page="data" hidden>
+    <div id="reminder-sync">
+    <section class="connection" aria-labelledby="connection-title">
+      <div class="section-heading"><h2 id="connection-title">提醒事项同步</h2><span id="status" role="status">正在检查</span></div>
+      <div id="restore-sync-note" class="notice" hidden>导入后同步已暂停，请重新连接并核对。</div>
+      <p id="description">连接手机常用清单，自动双向同步。</p>
+      <div id="error" class="notice error" role="alert" hidden></div>
+      <div id="unsupported" class="notice" hidden>苹果提醒事项连接仅支持 Mac，本地待办仍可正常使用。</div>
+      <div id="disconnected">
+        <button id="authorize" class="primary">连接苹果提醒事项</button>
+      </div>
+      <div id="permission-actions" class="actions" hidden><button id="reauthorize">允许访问提醒事项</button><button id="privacy" class="quiet">打开权限设置</button></div>
+      <div id="list-picker" hidden>
+        <label for="calendar">选择你平时记录的 iCloud 清单</label>
+        <div class="select-row"><select id="calendar"><option value="">请选择清单</option></select><button id="preview">预览合并</button></div>
+        <p class="fine">手机与 Mac 需使用同一 iCloud 账号。</p>
+      </div>
+      <div id="connected" hidden>
+        <div class="calendar-line"><span class="calendar-dot"></span><strong id="calendar-name"></strong></div>
+        <p id="last-sync" class="fine"></p>
+        <p id="last-attempt" class="fine" hidden></p>
+        <div class="actions"><button id="sync-now" class="primary">立即同步</button><button id="disconnect" class="quiet">断开连接</button></div><p id="sync-feedback" class="fine" role="status" hidden></p>
+      </div>
+    </section>
+
+    <section id="merge-panel" hidden aria-labelledby="merge-title">
+      <h2 id="merge-title">首次合并预览</h2>
+      <p id="merge-count"></p>
+      <p class="fine">只合并未完成任务，历史已完成记录留在原处。确认前不会写入苹果清单。</p>
+      <details><summary>查看本次任务</summary><div id="merge-tasks" class="task-preview"></div></details>
+      <div id="merge-toolbar" hidden>
+        <p class="fine">同一件事选「合并」，首次采用苹果当前内容；不同的事选「独立」，两条分别保留并同步。</p>
+        <div class="merge-bulk"><span>批量处理</span><button id="merge-all">全部合并</button><button id="separate-all">全部独立</button></div>
+      </div>
+      <div id="duplicates" aria-label="同名任务处理清单" tabindex="0"></div>
+      <p id="merge-progress" class="fine" role="status"></p>
+      <div id="merge-feedback" class="notice error" role="alert" tabindex="-1" hidden></div>
+      <div class="actions merge-actions"><button id="confirm-merge" class="primary">确认合并并开始同步</button><button id="cancel-merge" class="quiet">取消</button></div>
+    </section>
+
+    <section id="conflict-panel" hidden aria-labelledby="conflict-title"><h2 id="conflict-title">需要你决定</h2><p class="fine">两边的内容都保留着，请选择本次要采用的内容。</p><div id="conflicts"></div></section>
+    <section id="uncertain-panel" hidden><h2>确认上次新增的结果</h2><p>上一次写入没有返回完整结果。为避免重复，已暂停新增，请先在提醒事项确认是否已有这条任务。</p><p id="uncertain-text" class="task-title"></p><select id="uncertain-choice"></select><button id="resolve-create">确认处理方式</button></section>
+
+    </div>
+    <section id="app-reminder-section" aria-labelledby="notification-title">
+      <h2 id="notification-title">不记Todo提醒</h2>
+      <label class="reminder-setting-row"><span>苹果同步待办也在本机弹窗提醒</span><input type="checkbox" id="cats" checked></label>
+      <div class="reminder-avatar-row"><span>提醒形象</span><button id="open-avatar-gallery" class="gallery-entry" aria-haspopup="dialog"><img id="reminder-avatar-preview" src="assets/cats/cat1.png" alt="提醒图库"><span id="avatar-count">图库</span><span aria-hidden="true">›</span></button><button id="test-reminder" class="text-button">试一下</button></div>
+    </section>
+    <section id="backup-section"><h2>导入与导出</h2><p class="fine">全部待办与图片 · ZIP</p>
+      <div class="actions"><button id="export-backup">导出</button><button id="import-backup">导入</button></div>
+      <div id="restore-preview" class="restore-preview" hidden><h3>确认导入</h3><p id="restore-summary"></p><details><summary>预览任务</summary><div id="restore-tasks" class="task-preview"></div></details><p class="fine">将替换桌面全部待办并暂停同步。手机内容不变。</p><div class="actions"><button id="confirm-restore" class="primary">替换并导入</button><button id="cancel-restore" class="quiet">取消</button></div></div>
+    </section>
+    </div>
+    <div data-settings-page="about" hidden><section><h2>不记Todo <span id="app-version"></span></h2><p>桌面常驻的轻量待办。</p><details><summary>更新说明</summary><ul id="release-notes"></ul></details><div class="actions"><button id="check-update">检查更新</button><button id="release-page" class="quiet">查看发布页</button><button id="feedback" class="quiet">反馈问题</button></div><p id="update-result" class="fine" role="status"></p></section></div>
+  </main>
+  <dialog id="avatar-gallery" aria-labelledby="gallery-title"><div class="gallery-heading"><h2 id="gallery-title">提醒图库</h2><button id="close-avatar-gallery" aria-label="关闭图库">×</button></div><div class="gallery-toolbar"><button id="pick-reminder-avatar">上传图片</button><button id="delete-gallery-items" class="quiet" disabled>删除</button><button id="add-default-cats" class="text-button" hidden>添加小猫</button></div><p class="gallery-note">每次提醒随机展示 · PNG、WebP、JPG · 每张最大 8MB</p><div id="gallery-error" class="notice error" role="alert" hidden></div><div id="gallery-grid" class="gallery-grid"></div></dialog>
+  <dialog id="avatar-viewer" aria-label="查看提醒图片"><button id="close-avatar-viewer" aria-label="关闭图片">×</button><img id="avatar-viewer-image" alt="提醒形象大图"></dialog>
+  <script src="sync-settings.js"></script>
+  <script src="color-utils.js"></script>
+  <script src="settings-page.js"></script>
+</body>
+</html>

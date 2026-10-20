@@ -1,9 +1,28 @@
-// 不记Todo v0.7 - app.js
+// 不记Todo v0.6.4 - app.js
 (function() {
   'use strict';
 
   // ===================== Constants =====================
   const COLLAPSED_WIN_H = 240; // 折叠模式窗口高度（含菜单透明区域）
+  const { compareDeadlines, deadlineMoment, isRepeatDoneForDate } = window.TodoTime;
+  const ICON_PATHS = {
+    sort: '<path d="M4 6h16M4 12h11M4 18h6"/>',
+    list: '<path d="M8 6h12M8 12h12M8 18h12M3.5 6h.1M3.5 12h.1M3.5 18h.1"/>',
+    collapse: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 12h10"/>',
+    settings: '<path d="m9 3-1 3-3 1-2 4 2 2v4l4 3 3-1 3 1 4-3v-4l2-2-2-4-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 10h18M7 14h2M13 14h2"/>',
+    priority: '<path d="M5 21V4c5-4 9 4 14 0v10c-5 4-9-4-14 0"/>',
+    tag: '<path d="M3 4h8l10 10-8 8L3 12Z"/><circle cx="7.5" cy="8.5" r="1"/>',
+    note: '<rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
+    'bell-off': '<path d="m3 3 18 18M10 21h4M6 8c0 7-3 7-3 9h12M10 2a6 6 0 0 1 8 6c0 2 .3 3.5 1 5"/>',
+    repeat: '<path d="M4 9V5h13l3 3M20 15v4H7l-3-3M17 2l3 3-3 3M7 16l-3 3 3 3"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>'
+  };
+  function lineIcon(name, size = 13) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
+  }
+  document.querySelectorAll('[data-ui-icon]').forEach(el => { el.innerHTML = lineIcon(el.dataset.uiIcon, 14); });
 
   // ===================== State =====================
   let todos = [];
@@ -35,6 +54,7 @@
   // 时间滚轮选择器（需要在 bindEvents 和 resetPanelState 之间共享）
   let twContainer = null;
   let addWheelPicker = null;
+  let addRepeatPicker = null;
 
   // DOM
   const $ = s => document.querySelector(s);
@@ -55,26 +75,142 @@
   const elEditOverlay = $('#edit-overlay');
   const elEditPopup = $('#edit-popup');
 
+  // 共用浮层定位与生命周期：对齐触发控件，空间不足时向上展开。
+  const openPickers = new Set();
+  function closePickers() { [...openPickers].forEach(picker => picker.close()); }
+
+  function createPickerPopup(field, popup) {
+    popup.classList.add('picker-popup');
+    field.setAttribute('aria-expanded', 'false');
+    let opened = false;
+    const picker = { open, close, destroy, isOpen: () => opened };
+    function position() {
+      if (!opened) return;
+      if (!field.isConnected || field.getClientRects().length === 0) { close(); return; }
+      const r = field.getBoundingClientRect();
+      const scrollArea = field.closest('.add-panel-content, .inline-popover');
+      const clip = scrollArea ? scrollArea.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+      if (r.top < clip.top || r.bottom > clip.bottom) { close(); return; }
+      const margin = 8, gap = 4;
+      popup.style.maxHeight = '';
+      const naturalH = popup.getBoundingClientRect().height;
+      const below = Math.max(0, window.innerHeight - r.bottom - gap - margin);
+      const above = Math.max(0, r.top - gap - margin);
+      const upwards = naturalH > below && above > below;
+      popup.style.maxHeight = Math.min(naturalH, upwards ? above : below) + 'px';
+      const h = popup.getBoundingClientRect().height;
+      const w = popup.getBoundingClientRect().width;
+      popup.style.left = Math.max(margin, Math.min(r.left, window.innerWidth - w - margin)) + 'px';
+      popup.style.top = Math.max(margin, upwards ? r.top - gap - h : r.bottom + gap) + 'px';
+    }
+    function outside(e) {
+      if (!field.contains(e.target) && !popup.contains(e.target)) close();
+    }
+    function keydown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation(); close(); field.focus();
+      }
+    }
+    function open() {
+      if (opened) return;
+      closePickers();
+      opened = true;
+      popup.classList.add('show'); field.classList.add('active');
+      field.setAttribute('aria-expanded', 'true');
+      openPickers.add(picker);
+      position();
+      if (!opened) return;
+      document.addEventListener('click', outside, true);
+      document.addEventListener('keydown', keydown, true);
+      document.addEventListener('scroll', position, true);
+      window.addEventListener('resize', position);
+    }
+    function close() {
+      opened = false;
+      popup.classList.remove('show'); field.classList.remove('active');
+      field.setAttribute('aria-expanded', 'false');
+      openPickers.delete(picker);
+      document.removeEventListener('click', outside, true);
+      document.removeEventListener('keydown', keydown, true);
+      document.removeEventListener('scroll', position, true);
+      window.removeEventListener('resize', position);
+    }
+    function destroy() { close(); popup.remove(); }
+    popup.addEventListener('click', e => e.stopPropagation());
+    return picker;
+  }
+
+  function createRepeatPicker(select) {
+    const field = document.createElement('button');
+    field.type = 'button';
+    field.className = 'tw-field repeat-field';
+    field.setAttribute('aria-label', '循环');
+    field.setAttribute('aria-haspopup', 'listbox');
+    select.hidden = true;
+    select.style.display = 'none';
+    select.after(field);
+    field.disabled = select.disabled;
+    const popup = document.createElement('div');
+    popup.className = 'tw-popup repeat-popup';
+    popup.setAttribute('role', 'listbox');
+    popup.setAttribute('aria-label', '循环频率');
+    document.body.appendChild(popup);
+    const picker = createPickerPopup(field, popup);
+    const options = [...select.options].map(option => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'repeat-option'; button.disabled = option.disabled;
+      button.setAttribute('role', 'option'); button.dataset.value = option.value;
+      button.textContent = option.textContent;
+      button.onclick = () => {
+        select.value = option.value;
+        update(); picker.close(); field.focus();
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      popup.appendChild(button);
+      return button;
+    });
+    function update() {
+      field.textContent = select.selectedOptions[0].textContent;
+      options.forEach(button => button.setAttribute('aria-selected', String(button.dataset.value === select.value)));
+    }
+    field.onclick = (e) => { e.stopPropagation(); picker.isOpen() ? picker.close() : picker.open(); };
+    field.onkeydown = (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); picker.open();
+        options[Math.max(0, select.selectedIndex)].focus();
+      }
+    };
+    popup.onkeydown = (e) => {
+      const index = options.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        options[(index + (e.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length].focus();
+      } else if (e.key === 'Tab') picker.close();
+    };
+    update();
+    return { setValue: value => { select.value = value; update(); }, destroy: () => { picker.destroy(); field.remove(); } };
+  }
+
   // ===================== Time Wheel Picker =====================
   // 创建 iOS 风格双列滚轮时间选择器
   // 时间选择器：紧凑文本框 + 浮动弹出滚轮
   function createTimeWheelPicker(container, initH, initM, onChange) {
-    const ITEM_H = 28;
-    const VISIBLE = 5;
+    const ITEM_H = 24;
+    const VISIBLE = 3;
     const CENTER = Math.floor(VISIBLE / 2);
 
     let curH = initH, curM = initM;
-    let opened = false;
     let hasValue = false;
+    let columnCleanups = [];
 
     // 文本框行
     const row = document.createElement('div');
     row.className = 'tw-row';
     row.innerHTML = `
       <span class="tw-label">时间</span>
-      <span class="tw-field" tabindex="0">
+      <button type="button" class="tw-field" aria-label="选择时间" aria-haspopup="dialog">
         <span class="tw-val tw-hh">--</span><span class="tw-colon">:</span><span class="tw-val tw-mm">--</span>
-      </span>
+      </button>
     `;
     container.appendChild(row);
 
@@ -100,10 +236,18 @@
     popup.innerHTML = '<div class="tw-wheel"></div>';
     document.body.appendChild(popup);
     const wheelEl = popup.querySelector('.tw-wheel');
+    popup.setAttribute('role', 'dialog');
+    popup.setAttribute('aria-label', '选择时间');
+    const picker = createPickerPopup(field, popup);
 
     function createColumn(max, initVal) {
       const col = document.createElement('div');
       col.className = 'tw-col';
+      col.tabIndex = 0;
+      col.setAttribute('role', 'spinbutton');
+      col.setAttribute('aria-label', max === 23 ? '小时' : '分钟');
+      col.setAttribute('aria-valuemin', '0');
+      col.setAttribute('aria-valuemax', String(max));
 
       const highlight = document.createElement('div');
       highlight.className = 'tw-col-hl';
@@ -126,6 +270,7 @@
       const total = max + 1;
 
       function position(anim) {
+        col.setAttribute('aria-valuenow', String(val));
         const offset = CENTER * ITEM_H - val * ITEM_H;
         list.style.transition = anim ? 'transform .15s cubic-bezier(.2,.8,.4,1)' : 'none';
         list.style.transform = `translateY(${offset}px)`;
@@ -142,6 +287,13 @@
         position(anim);
       }
       function getVal() { return val; }
+      col.addEventListener('keydown', e => {
+        if (['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
+          e.preventDefault();
+          setVal(e.key === 'Home' ? 0 : e.key === 'End' ? max : val + (e.key === 'ArrowUp' ? -1 : 1));
+          sync();
+        }
+      });
 
       // 滚轮
       col.addEventListener('wheel', (e) => {
@@ -156,15 +308,21 @@
         dragging = true; startY = e.clientY; startVal = val;
         list.style.transition = 'none'; e.preventDefault();
       });
-      document.addEventListener('mousemove', (e) => {
+      const onMove = (e) => {
         if (!dragging) return;
         const dv = Math.round((startY - e.clientY) / ITEM_H);
         const nv = ((startVal + dv) % total + total) % total;
         if (nv !== val) { val = nv; position(false); }
-      });
-      document.addEventListener('mouseup', () => {
+      };
+      const onUp = () => {
         if (!dragging) return;
         dragging = false; position(true); sync();
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      columnCleanups.push(() => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
       });
 
       // 点击选中
@@ -179,6 +337,8 @@
     let hourCol, minCol;
 
     function buildWheel() {
+      columnCleanups.forEach(cleanup => cleanup());
+      columnCleanups = [];
       wheelEl.innerHTML = '';
       hourCol = createColumn(23, curH);
       const sep = document.createElement('span');
@@ -198,37 +358,24 @@
       if (onChange) onChange(curH, curM);
     }
 
-    function positionPopup() {
-      const rect = field.getBoundingClientRect();
-      popup.style.left = rect.left + 'px';
-      popup.style.top = (rect.bottom + 4) + 'px';
-    }
-
     function open() {
-      if (opened) return;
-      opened = true;
+      if (picker.isOpen()) return;
       if (!hasValue) { curH = new Date().getHours(); curM = new Date().getMinutes(); }
       buildWheel();
-      positionPopup();
-      popup.classList.add('show');
-      field.classList.add('active');
+      picker.open();
     }
 
     function close() {
-      if (!opened) return;
-      opened = false;
-      popup.classList.remove('show');
-      field.classList.remove('active');
+      picker.close();
     }
 
     // 事件
-    field.addEventListener('click', (e) => { e.stopPropagation(); opened ? close() : open(); });
-    popup.addEventListener('click', (e) => e.stopPropagation());
-    document.addEventListener('click', () => { if (opened) close(); });
+    field.addEventListener('click', (e) => { e.stopPropagation(); picker.isOpen() ? close() : open(); });
 
     function destroy() {
-      popup.remove();
-      document.removeEventListener('click', close);
+      columnCleanups.forEach(cleanup => cleanup());
+      columnCleanups = [];
+      picker.destroy();
     }
 
     return {
@@ -241,9 +388,30 @@
     };
   }
 
+  function applyPreferences(value) {
+    document.documentElement.style.setProperty('--font-scale', value.fontScale / 100);
+    const rgb = window.TodoColor.toRGB(value.backgroundColor);
+    document.documentElement.dataset.darkSurface = String(window.TodoColor.isDark(value.backgroundColor));
+    document.documentElement.style.setProperty('--paper', 'rgba(' + rgb.join(',') + ',' + value.opacity / 100 + ')');
+    document.documentElement.style.setProperty('--card-padding-y', (4 + value.cardSpacing * .16) + 'px');
+    document.documentElement.style.setProperty('--card-padding-x', (8 + value.cardSpacing * .08) + 'px');
+    document.documentElement.style.setProperty('--card-gap', (2 + value.cardSpacing * .12) + 'px');
+    $('#btn-pin').classList.toggle('pinned', value.pinned); isPinned = value.pinned;
+    requestAnimationFrame(adjustWindowHeight);
+  }
+  function savePreference(patch) {
+    window.api.settingsCall('save', patch).catch(error => {
+      let notice = document.getElementById('preference-error');
+      if (!notice) { notice = document.createElement('div'); notice.id = 'preference-error'; notice.setAttribute('role', 'alert'); document.body.appendChild(notice); }
+      notice.textContent = '设置未保存：' + error.message;
+      setTimeout(() => notice.remove(), 8000);
+    });
+  }
+
   // ===================== Init =====================
   async function init() {
-    const data = await window.api.loadData();
+    const [data, info] = await Promise.all([window.api.loadData(), window.api.settingsCall('get')]);
+    sortMode = info.preferences.sortMode; applyPreferences(info.preferences);
     todos = data.todos || [];
     tagGroupOrder = data.tagGroupOrder || [];
 
@@ -252,7 +420,17 @@
 
     setGreeting();
     bindEvents();
-    render();
+    updatePriBtn();
+    // 添加窗口由内容决定高度，手动拉长或内容变化后也重新收紧。
+    window.addEventListener('resize', () => { if (panelOpen) adjustWindowHeight(); });
+    new ResizeObserver(() => { if (panelOpen) adjustWindowHeight(); })
+      .observe($('#add-panel-content'));
+    new MutationObserver(() => { if (panelOpen) adjustWindowHeight(); })
+      .observe($('#add-panel-content'), { childList: true, characterData: true, subtree: true });
+    render(); updateSortBtn(); updateViewBtn();
+    if (info.preferences.viewMode === 'calendar') toggleViewMode();
+    if (info.preferences.collapsed) toggleCollapse();
+    window.api.onPreferencesUpdated(applyPreferences);
     setInterval(setGreeting, 60000);
 
     // 对有占位标题或无标题的链接重新获取真实标题
@@ -260,13 +438,18 @@
 
     // 监听主进程数据更新（来自猫咪提醒操作按钮）
     if (window.api.onTodosUpdated) {
-      window.api.onTodosUpdated(async () => {
+      let refreshTimer;
+      const refreshFromDisk = async () => {
+        if (document.activeElement?.matches('.editing, .cv-editing, .ip-note, .ip-tag')) {
+          clearTimeout(refreshTimer); refreshTimer = setTimeout(refreshFromDisk, 800); return;
+        }
         const freshData = await window.api.loadData();
         todos = freshData.todos || [];
         tagGroupOrder = freshData.tagGroupOrder || [];
         render();
         if (viewMode === 'calendar') renderCalView();
-      });
+      };
+      window.api.onTodosUpdated(refreshFromDisk);
     }
   }
 
@@ -275,7 +458,7 @@
     // 按 text + repeat 分组，只处理有 repeat 的
     const groups = {};
     todos.forEach(t => {
-      if (!t.repeat || !t.ddl) return;
+      if (t.restoredFromBackup || t.appleReminderId || !t.repeat || !t.ddl) return;
       const key = `${t.text}|||${t.repeat}`;
       if (!groups[key]) groups[key] = [];
       groups[key].push(t);
@@ -317,7 +500,7 @@
 
     // 额外处理：单条循环待办如果 done=true（旧版遗留），转为 completedDates 机制
     todos.forEach(t => {
-      if (t.repeat && t.ddl && t.done) {
+      if (t.repeat && t.ddl && (!t.appleReminderId && !t.restoreAppleLink) && t.done) {
         t.done = false;
         if (!t.completedDates) t.completedDates = [];
         const dk = ds(new Date(t.ddl));
@@ -337,16 +520,8 @@
   async function refreshStaleTitles() {
     for (const todo of todos) {
       if (!todo.links || todo.links.length === 0) continue;
-      const needsFetch = todo.links.some(l =>
-        !l.title || l.title.startsWith('学城文档 #')
-      );
+      const needsFetch = todo.links.some(l => !l.title);
       if (needsFetch) {
-        // 清除占位标题，强制重新获取
-        for (const link of todo.links) {
-          if (link.title && link.title.startsWith('学城文档 #')) {
-            link.title = null;
-          }
-        }
         await fetchTitlesForTodo(todo.id);
       }
     }
@@ -401,7 +576,7 @@
   function setGreeting() {
     const h = new Date().getHours();
     const todayK = dateKey(new Date());
-    const activeCount = todos.filter(t => !t.done && !(t.repeat && t.ddl && isRepeatDoneForDate(t, todayK))).length;
+    const activeCount = todos.filter(t => !t.done && !(t.repeat && t.ddl && (!t.appleReminderId && !t.restoreAppleLink) && isRepeatDoneForDate(t, todayK))).length;
 
     // 确定时段
     let period;
@@ -493,11 +668,12 @@
 
     // DDL区域回车 → 直接添加（选完日期后不需要再点按钮）
     $('#exp-ddl').addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.target.classList.contains('t-inp')) addTodo();
+      if (e.key === 'Enter' && !e.isComposing && !e.target.closest('button, select, [role="spinbutton"]')) addTodo();
     });
 
     // 循环下拉框
     $('#sel-repeat').onchange = () => { curRepeat = $('#sel-repeat').value || null; };
+    addRepeatPicker = createRepeatPicker($('#sel-repeat'));
 
     // 时间滚轮选择器（初始化移到 bindEvents 外部，resetPanelState 也需要访问）
     twContainer = $('#time-wheel-container');
@@ -558,61 +734,55 @@
     const viewBtn = $('#btn-view');
     const viewMenu = document.getElementById('view-menu');
 
+    const settingsBtn = $('#btn-settings'), settingsMenu = $('#settings-menu');
+    const menus = [[sortBtn, sortMenu], [viewBtn, viewMenu], [settingsBtn, settingsMenu]];
+    let menuTrigger = settingsBtn;
     function closeAllMenus() {
-      if (sortMenu) sortMenu.classList.add('hidden');
-      if (viewMenu) viewMenu.classList.add('hidden');
+      for (const [btn, menu] of menus) { menu.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); }
     }
-
-    // 定位 fixed 菜单到按钮下方
-    function positionMenu(btn, menu) {
+    function openHeaderMenu(btn, menu) {
+      closeAllMenus(); updateSortBtn(); updateViewBtn(); updateViewMenuOptions();
+      menuTrigger = btn; menu.classList.remove('hidden'); btn.setAttribute('aria-expanded', 'true');
       const rect = btn.getBoundingClientRect();
-      menu.style.top = (rect.bottom + 4) + 'px';
-      menu.style.right = (window.innerWidth - rect.right) + 'px';
-      menu.style.left = '';
+      menu.style.top = `${rect.bottom + 5}px`;
+      menu.style.right = `${Math.max(6, innerWidth - rect.right)}px`;
+      menu.style.maxHeight = `${Math.max(30, innerHeight - rect.bottom - 12)}px`;
     }
-
-    // 排序下拉菜单
-    if (sortBtn && sortMenu) {
-      sortBtn.onclick = (e) => {
+    for (const [btn, menu] of menus) {
+      btn.onclick = e => {
         e.stopPropagation();
-        const willShow = sortMenu.classList.contains('hidden');
-        closeAllMenus();
-        if (willShow) { positionMenu(sortBtn, sortMenu); sortMenu.classList.remove('hidden'); }
+        if (menu.classList.contains('hidden')) openHeaderMenu(btn, menu); else closeAllMenus();
       };
-      sortMenu.onclick = (e) => {
-        const opt = e.target.closest('.sort-opt');
-        if (!opt) return;
-        const mode = opt.dataset.mode;
-        if (mode) selectSortMode(mode);
-        closeAllMenus();
+      btn.onkeydown = e => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); openHeaderMenu(btn, menu); menu.querySelector('button')?.focus(); }
       };
-    }
-
-    // 视图模式下拉菜单
-    if (viewBtn && viewMenu) {
-      viewBtn.onclick = (e) => {
-        e.stopPropagation();
-        const willShow = viewMenu.classList.contains('hidden');
-        closeAllMenus();
-        if (willShow) { positionMenu(viewBtn, viewMenu); viewMenu.classList.remove('hidden'); updateViewMenuOptions(); }
-      };
-      viewMenu.onclick = (e) => {
-        const opt = e.target.closest('.view-opt');
-        if (!opt) return;
-        const mode = opt.dataset.mode;
-        if (mode === 'list') {
-          if (isCollapsed) toggleCollapse();
-          if (viewMode === 'calendar') toggleViewMode();
-        } else if (mode === 'calendar') {
-          if (isCollapsed) toggleCollapse();
-          if (viewMode !== 'calendar') toggleViewMode();
-        } else if (mode === 'collapse') {
-          toggleCollapse();
+      menu.addEventListener('click', e => e.stopPropagation());
+      menu.onkeydown = e => {
+        if (e.key === 'Escape') { e.stopPropagation(); closeAllMenus(); menuTrigger.focus(); }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault(); const buttons = [...menu.querySelectorAll('button')];
+          const index = buttons.indexOf(document.activeElement), step = e.key === 'ArrowDown' ? 1 : -1;
+          buttons[index < 0 ? (step > 0 ? 0 : buttons.length - 1) : (index + step + buttons.length) % buttons.length]?.focus();
         }
-        closeAllMenus();
       };
     }
-
+    for (const [id, section] of [['open-general-settings', 'general'], ['open-appearance-settings', 'appearance'], ['open-sync-settings', 'data'], ['open-about-settings', 'about']]) {
+      $('#' + id).onclick = () => { closeAllMenus(); window.api.showSyncSettings(section); };
+    }
+    sortMenu.onclick = e => {
+      const opt = e.target.closest('.sort-opt'); if (!opt) return;
+      selectSortMode(opt.dataset.mode); closeAllMenus(); sortBtn.focus();
+    };
+    viewMenu.onclick = e => {
+      const opt = e.target.closest('.view-opt'); if (!opt) return;
+      const mode = opt.dataset.mode;
+      if (mode === 'list') { if (isCollapsed) toggleCollapse(); if (viewMode === 'calendar') toggleViewMode(); }
+      else if (mode === 'calendar') { if (isCollapsed) toggleCollapse(); if (viewMode !== 'calendar') toggleViewMode(); }
+      else if (mode === 'collapse') toggleCollapse();
+      closeAllMenus(); viewBtn.focus();
+    };
+    window.api.onOpenSettingsMenu?.(() => { openHeaderMenu(settingsBtn, settingsMenu); $('#open-sync-settings').focus(); });
+    window.addEventListener('resize', closeAllMenus);
     // 点击其他地方关闭所有菜单
     document.addEventListener('click', closeAllMenus);
     $('#cv-prev').onclick = () => { cvMonth.setMonth(cvMonth.getMonth() - 1); renderCalView(); };
@@ -668,10 +838,10 @@
 
   // ===================== Sort Toggle =====================
   const SORT_MODES = ['default', 'pri-asc', 'pri-desc', 'ddl-asc', 'ddl-desc', 'tag'];
-  const SORT_LABELS = { 'default': '默认', 'pri-asc': '优先↑', 'pri-desc': '优先↓', 'ddl-asc': '时间↑', 'ddl-desc': '时间↓', 'tag': '分类' };
+  const SORT_LABELS = { 'default': '排序', 'pri-asc': '优先↑', 'pri-desc': '优先↓', 'ddl-asc': '时间↑', 'ddl-desc': '时间↓', 'tag': '分类' };
 
   function selectSortMode(mode) {
-    sortMode = mode;
+    sortMode = mode; savePreference({ sortMode });
     updateSortBtn();
     render();
     if (viewMode === 'calendar') renderCalView();
@@ -680,7 +850,13 @@
   function updateSortBtn() {
     const btn = document.getElementById('btn-sort');
     if (!btn) return;
-    btn.textContent = SORT_LABELS[sortMode] || '排序';
+    const label = sortMode === 'default' ? '默认' : SORT_LABELS[sortMode] || '默认';
+    if (sortMode.startsWith('pri-') || sortMode.startsWith('ddl-')) {
+      const body = sortMode.startsWith('pri-') ? '<path d="M3 21V4c4-3 7 3 10 0v9c-3 3-6-3-10 0"/>' : '<circle cx="9" cy="12" r="6"/><path d="M9 8v4l3 2"/>';
+      const arrow = sortMode.endsWith('asc') ? '<path d="M20 19V5m-3 3 3-3 3 3"/>' : '<path d="M20 5v14m-3-3 3 3 3-3"/>';
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}${arrow}</svg>`;
+    } else btn.innerHTML = lineIcon(sortMode === 'tag' ? 'tag' : 'sort', 14);
+    btn.title = `排序：${label}`; btn.setAttribute('aria-label', btn.title);
     btn.classList.toggle('active', sortMode !== 'default');
     // 同步下拉菜单选中态
     const menu = document.getElementById('sort-menu');
@@ -759,6 +935,7 @@
   }
 
   function resetPanelState() {
+    closePickers();
     elInput.value = '';
     elInput._detectedLinks = null;
     $('#link-preview').classList.add('hidden');
@@ -770,7 +947,7 @@
     $('#note-input').value = '';
     $('#tag-input').value = '';
     $('#tag-suggestions').innerHTML = '';
-    $('#sel-repeat').value = '';
+    addRepeatPicker.setValue('');
     // 重置时间滚轮
     addWheelPicker.destroy();
     twContainer.innerHTML = '';
@@ -787,6 +964,7 @@
   }
 
   function toggleExpand(name) {
+    closePickers();
     const el = $(`#exp-${name}`);
     const btn = $(`#opt-${name}`);
     const willShow = el.classList.contains('hidden');
@@ -812,6 +990,7 @@
   function updatePriBtn() {
     const map = { urgent:'紧急', important:'重要', normal:'普通' };
     $('#pri-text').textContent = map[curPri];
+    $('#opt-pri').dataset.priority = curPri;
   }
 
   function updateTagBtn() {
@@ -985,12 +1164,10 @@
       return;
     }
 
-    // 先立即用 guessTitle 显示，学城链接显示"识别中..."
+    // 获取网页标题前显示简短网址。
     for (const link of links) {
-      link.title = guessTitle(link.url);
-      if (!link.title && extractKmContentId(link.url)) {
-        link._loading = true;
-      }
+      link.title = null;
+      link._loading = true;
     }
     showLinkPreview(links);
     elInput._detectedLinks = links;
@@ -999,14 +1176,6 @@
     inputFetchTimer = setTimeout(async () => {
       for (const link of links) {
         if (link.title) continue;
-        // 学城链接用 citadel 获取真实标题
-        const kmId = extractKmContentId(link.url);
-        if (kmId) {
-          try {
-            const fetched = await window.api.fetchKmTitle(kmId);
-            if (fetched) { link.title = fetched; link._loading = false; showLinkPreview(links); continue; }
-          } catch (e) { /* ignore */ }
-        }
         // 通用 HTTP 抓取
         try {
           const fetched = await window.api.fetchTitle(link.url);
@@ -1037,17 +1206,6 @@
     let changed = false;
     for (const link of todo.links) {
       if (link.title) continue;
-      // 优先尝试学城 citadel 接口获取真实标题
-      const kmId = extractKmContentId(link.url);
-      if (kmId) {
-        try {
-          const title = await window.api.fetchKmTitle(kmId);
-          if (title) { link.title = title; changed = true; continue; }
-        } catch {}
-      }
-      // 通用 guessTitle 尝试
-      const guessed = guessTitle(link.url);
-      if (guessed) { link.title = guessed; changed = true; continue; }
       // 最后用 HTTP 抓取
       try {
         const title = await window.api.fetchTitle(link.url);
@@ -1055,20 +1213,6 @@
       } catch {}
     }
     if (changed) { render(); save(); }
-  }
-
-  function guessTitle(url) {
-    // 不再给学城链接返回占位文本，统一走异步获取真实标题
-    if (url.includes('bi.sankuai.com') || url.includes('moshu')) return '魔数看板';
-    return null;
-  }
-
-  // 从 km URL 中提取 contentId
-  function extractKmContentId(url) {
-    // 支持 km.sankuai.com / m.sankuai.com 等学城域名
-    if (!url.includes('sankuai.com')) return null;
-    const m = url.match(/collabpage\/(\d+)/) || url.match(/page\/(\d+)/);
-    return m ? m[1] : null;
   }
 
   // ===================== Auto Sort Compare =====================
@@ -1093,7 +1237,7 @@
 
     // 排序逻辑：sortMode 优先级最高
     // 循环待办已完成今天的从活跃列表隐藏
-    const repeatDoneTodayCheck = (t) => t.repeat && t.ddl && isRepeatDoneForDate(t, todayKey);
+    const repeatDoneTodayCheck = (t) => t.repeat && t.ddl && (!t.appleReminderId && !t.restoreAppleLink) && isRepeatDoneForDate(t, todayKey);
     const visibleActive = active.filter(t => !repeatDoneTodayCheck(t));
     const repeatDoneToday = active.filter(t => repeatDoneTodayCheck(t));
 
@@ -1108,15 +1252,9 @@
           const priRank = { urgent: 0, important: 1, normal: 2 };
           return (priRank[a.priority] ?? 2) - (priRank[b.priority] ?? 2);
         } else if (sortMode === 'ddl-asc') {
-          if (a.ddl && !b.ddl) return -1;
-          if (!a.ddl && b.ddl) return 1;
-          if (a.ddl && b.ddl) return a.ddl - b.ddl;
-          return 0;
+          return compareDeadlines(a, b, 'asc');
         } else if (sortMode === 'ddl-desc') {
-          if (a.ddl && !b.ddl) return -1;
-          if (!a.ddl && b.ddl) return 1;
-          if (a.ddl && b.ddl) return b.ddl - a.ddl;
-          return 0;
+          return compareDeadlines(a, b, 'desc');
         }
         return 0;
       });
@@ -1556,7 +1694,7 @@
   // 确保 tagGroupOrder 包含当前所有标签组和无标签 todo
   function rebuildTagGroupOrder() {
     const todayKey = dateKey(new Date());
-    const repeatDoneTodayCheck = (t) => t.repeat && t.ddl && isRepeatDoneForDate(t, todayKey);
+    const repeatDoneTodayCheck = (t) => t.repeat && t.ddl && (!t.appleReminderId && !t.restoreAppleLink) && isRepeatDoneForDate(t, todayKey);
     const active = todos.filter(t => !t.done && !repeatDoneTodayCheck(t));
 
     const allTags = [...new Set(active.filter(t => t.tag).map(t => t.tag))];
@@ -1644,14 +1782,13 @@
     dl.className = 'card-lbl ddl-lbl';
     if (todo.ddl) {
       const ddlDate = new Date(todo.ddl);
-      const diff = ddlDate - new Date();
-      if (diff < 0) dl.classList.add('overdue');
-      else if (diff < 24*3600000) dl.classList.add('soon');
+      const diff = deadlineMoment(todo) - Date.now();
+      if (diff < 0 && !isDone && !repeatDoneToday) dl.classList.add('overdue');
       dl.textContent = fmtDdl(ddlDate, todo.ddlHasTime);
     } else {
-      dl.textContent = '+ 时间';
-      dl.style.opacity = '0.5';
+      dl.textContent = ''; dl.classList.add('empty-lbl');
     }
+    dl.insertAdjacentHTML('afterbegin', lineIcon('calendar'));
     dl.onclick = (e) => { e.stopPropagation(); openEditPopup(todo.id, 'ddl'); };
     labels.appendChild(dl);
 
@@ -1660,14 +1797,20 @@
       const bell = document.createElement('span');
       bell.className = 'card-lbl bell-lbl' + (todo.noReminder ? ' muted' : '');
       bell.textContent = todo.noReminder ? '🔕' : '🔔';
-      bell.title = todo.noReminder ? '点击开启提醒' : '点击关闭提醒';
+      bell.title = todo.noReminder ? '点击开启不记Todo提醒' : '点击关闭不记Todo提醒';
+      bell.setAttribute('role', 'button'); bell.tabIndex = 0;
+      bell.setAttribute('aria-pressed', String(!todo.noReminder));
+      bell.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); bell.click(); } };
+      if (todo.appleReminderId) bell.title += '（不影响苹果通知）';
       bell.onclick = async (e) => {
         e.stopPropagation();
         const isOn = await window.api.toggleReminder(todo.id);
         todo.noReminder = !isOn;
         bell.textContent = isOn ? '🔔' : '🔕';
-        bell.title = isOn ? '点击关闭提醒' : '点击开启提醒';
+        bell.title = isOn ? '点击关闭不记Todo提醒' : '点击开启不记Todo提醒';
+        if (todo.appleReminderId) bell.title += '（不影响苹果通知）';
         bell.classList.toggle('muted', !isOn);
+        bell.setAttribute('aria-pressed', String(isOn));
       };
       labels.appendChild(bell);
     }
@@ -1676,14 +1819,15 @@
     if (todo.repeat) {
       const rlWrap = document.createElement('span');
       rlWrap.className = 'card-lbl repeat-lbl lbl-select-wrap';
-      const repeatMap = { daily: '🔄日', weekly: '🔄周' };
-      rlWrap.textContent = repeatMap[todo.repeat] || '';
+      const repeatMap = { daily: '每天', weekly: '每周', custom: '自定义' };
+      rlWrap.innerHTML = lineIcon('repeat'); rlWrap.append(document.createTextNode(repeatMap[todo.repeat] || ''));
       const rpSel = document.createElement('select');
       rpSel.className = 'lbl-native-select';
       rpSel.innerHTML = `<option value="">不循环</option><option value="daily"${todo.repeat==='daily'?' selected':''}>每天</option><option value="weekly"${todo.repeat==='weekly'?' selected':''}>每周</option>`;
       rpSel.onchange = (e) => { e.stopPropagation(); todo.repeat = rpSel.value || null; render(); save(); if (viewMode === 'calendar') renderCalView(); };
       rpSel.onclick = (e) => e.stopPropagation();
-      rlWrap.appendChild(rpSel);
+      if (todo.repeat !== 'custom') rlWrap.appendChild(rpSel);
+      else rlWrap.title = '在苹果提醒事项中修改循环规则';
       labels.appendChild(rlWrap);
     }
 
@@ -1691,12 +1835,12 @@
     const tl = document.createElement('span');
     tl.className = 'card-lbl tag-lbl';
     if (todo.tag) {
-      tl.textContent = '#' + (todo.tag.length > 6 ? todo.tag.slice(0,6)+'…' : todo.tag);
+      tl.textContent = (todo.tag.length > 6 ? todo.tag.slice(0,6)+'…' : todo.tag);
       tl.classList.add('has-tag');
     } else {
-      tl.textContent = '+ 标签';
-      tl.style.opacity = '0.5';
+      tl.textContent = ''; tl.classList.add('empty-lbl');
     }
+    tl.insertAdjacentHTML('afterbegin', lineIcon('tag'));
     tl.onclick = (e) => { e.stopPropagation(); openEditPopup(todo.id, 'tag'); };
     labels.appendChild(tl);
 
@@ -1706,12 +1850,16 @@
     if (todo.note) {
       nl.textContent = todo.note.length > 8 ? todo.note.slice(0,8)+'…' : todo.note;
     } else {
-      nl.textContent = '+ 备注';
-      nl.style.opacity = '0.5';
+      nl.textContent = ''; nl.classList.add('empty-lbl');
     }
+    nl.insertAdjacentHTML('afterbegin', lineIcon('note'));
     nl.onclick = (e) => { e.stopPropagation(); openEditPopup(todo.id, 'note'); };
     labels.appendChild(nl);
 
+    for (const [el, label] of [[dl, todo.ddl ? '修改截止时间' : '添加截止时间'], [tl, todo.tag ? '修改标签：' + todo.tag : '添加标签'], [nl, todo.note ? '修改备注：' + todo.note : '添加备注']]) {
+      el.title = label; el.setAttribute('aria-label', label); el.setAttribute('role', 'button'); el.tabIndex = 0;
+      el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); el.click(); } };
+    }
     body.appendChild(labels);
 
     // Images (inline with content)
@@ -1744,6 +1892,7 @@
     const del = document.createElement('button');
     del.className = 'card-delete';
     del.innerHTML = '×';
+    del.title = '删除待办'; del.setAttribute('aria-label', '删除待办');
     del.onclick = (e) => { e.stopPropagation(); deleteTodo(todo.id); };
 
     card.appendChild(check);
@@ -1767,13 +1916,11 @@
         text = text.replace(searchText, linkHtml);
       }
     }
+    if (todo.appleUrl && !todo.text.includes(todo.appleUrl)) text += ` <a class="card-link" data-url="${escAttr(todo.appleUrl)}">链接 ↗</a>`;
     return text;
   }
 
   function shortenUrl(url) {
-    // 学城链接特殊处理：显示为"学城文档"而非长 URL
-    const kmId = extractKmContentId(url);
-    if (kmId) return '学城文档';
     try { const u = new URL(url); let s = u.hostname + u.pathname; return s.length > 28 ? s.slice(0,26)+'…' : s; }
     catch { return url.slice(0, 28); }
   }
@@ -1787,7 +1934,7 @@
 
     card.addEventListener('pointerdown', (e) => {
       // 忽略交互元素上的按下
-      if (e.target.closest('button, select, a, input, textarea, .card-check, .card-delete, .card-img-del, .lbl-native-select')) return;
+      if (e.target.closest('button, select, a, input, textarea, .card-check, .card-lbl, .card-delete, .card-img-del, .lbl-native-select')) return;
       if (e.button !== 0) return;
       // 不在这里 preventDefault — 让 click 等事件正常触发
       pendingDrag = { startY: e.clientY, pointerId: e.pointerId };
@@ -1888,7 +2035,7 @@
   function reorder(fromId, toId, insertBefore) {
     // 先按当前渲染顺序获取 active 列表（已排序后的，与 render 一致）
     const todayKey = dateKey(new Date());
-    const repeatDoneTodayCheck = (t) => t.repeat && t.ddl && isRepeatDoneForDate(t, todayKey);
+    const repeatDoneTodayCheck = (t) => t.repeat && t.ddl && (!t.appleReminderId && !t.restoreAppleLink) && isRepeatDoneForDate(t, todayKey);
     // 只对可见的活跃待办排序（循环待办今天完成的不参与拖拽）
     const active = todos.filter(t => !t.done && !repeatDoneTodayCheck(t));
 
@@ -1931,11 +2078,6 @@
     return ds(d);
   }
 
-  // 循环待办：获取指定日期是否已完成
-  function isRepeatDoneForDate(todo, dateStr) {
-    return todo.completedDates && todo.completedDates.includes(dateStr);
-  }
-
   // 循环待办：获取当前应该显示的"目标日期"（列表视图用今天，日历视图用选中日期）
   function getRepeatTargetDate() {
     if (viewMode === 'calendar' && cvSelectedDate) {
@@ -1950,7 +2092,7 @@
     if (!t) return;
 
     // 循环待办：使用 completedDates 机制
-    if (t.repeat && t.ddl) {
+    if (t.repeat && t.ddl && (!t.appleReminderId && !t.restoreAppleLink)) {
       if (!t.completedDates) t.completedDates = [];
       const targetDate = forDateStr || dateKey(new Date());
       const idx = t.completedDates.indexOf(targetDate);
@@ -1973,7 +2115,8 @@
     if (viewMode === 'calendar') renderCalView();
   }
 
-  function deleteTodo(id) {
+  async function deleteTodo(id) {
+    if (!await window.api.confirmDeleteTodos([id])) return;
     todos = todos.filter(x => x.id !== id);
     render(); save();
     if (viewMode === 'calendar') renderCalView();
@@ -1989,7 +2132,8 @@
     requestAnimationFrame(adjustWindowHeight);
   }
 
-  function clearDoneTodos() {
+  async function clearDoneTodos() {
+    if (!await window.api.confirmDeleteTodos(todos.filter(t => t.done).map(t => t.id))) return;
     const todayKey = dateKey(new Date());
     const doneCount = todos.filter(x => x.done).length;
     const repeatDoneCount = todos.filter(x => !x.done && x.repeat && x.ddl && isRepeatDoneForDate(x, todayKey)).length;
@@ -1998,7 +2142,7 @@
     todos = todos.filter(x => !x.done);
     // 撤回循环待办今天的完成记录
     todos.forEach(t => {
-      if (t.repeat && t.ddl && t.completedDates) {
+      if (t.repeat && t.ddl && (!t.appleReminderId && !t.restoreAppleLink) && t.completedDates) {
         const idx = t.completedDates.indexOf(todayKey);
         if (idx !== -1) t.completedDates.splice(idx, 1);
       }
@@ -2010,6 +2154,7 @@
   // ===================== Calendar View =====================
   function toggleViewMode() {
     viewMode = viewMode === 'list' ? 'calendar' : 'list';
+    savePreference({ viewMode });
     if (viewMode === 'calendar') {
       elListArea.style.display = 'none';
       elDoneSection.style.display = 'none';
@@ -2040,7 +2185,7 @@
       map[key].push(t);
 
       // 循环待办：在日历范围内展开未来日期
-      if (t.repeat && !t.done) {
+      if (t.repeat && !t.done && (!t.appleReminderId && !t.restoreAppleLink)) {
         const step = t.repeat === 'daily' ? 1 : 7;
         let next = new Date(t.ddl);
         for (let i = 0; i < 60; i++) { // 最多展开60次
@@ -2121,7 +2266,7 @@
       dots.className = 'cv-dots';
       const cellDateKey = dateKey(date);
       const undone = dayTodos.filter(t => {
-        if (t.repeat && t.ddl) return !isRepeatDoneForDate(t, cellDateKey);
+        if (t.repeat && t.ddl && (!t.appleReminderId && !t.restoreAppleLink)) return !isRepeatDoneForDate(t, cellDateKey);
         return !t.done;
       });
       const doneCount = dayTodos.length - undone.length;
@@ -2194,7 +2339,7 @@
 
     // 辅助：判断某条待办在选中日期是否"已完成"
     function isDoneForDay(t) {
-      if (t.repeat && t.ddl) return isRepeatDoneForDate(t, selDateKey);
+      if (t.repeat && t.ddl && (!t.appleReminderId && !t.restoreAppleLink)) return isRepeatDoneForDate(t, selDateKey);
       return t.done;
     }
 
@@ -2207,16 +2352,10 @@
       if (sortMode === 'pri-asc') return (priOrder[b.priority] ?? 2) - (priOrder[a.priority] ?? 2);
       if (sortMode === 'pri-desc') return (priOrder[a.priority] ?? 2) - (priOrder[b.priority] ?? 2);
       if (sortMode === 'ddl-asc') {
-        if (a.ddlHasTime && b.ddlHasTime) return a.ddl - b.ddl;
-        if (a.ddlHasTime) return -1;
-        if (b.ddlHasTime) return 1;
-        return 0;
+        return compareDeadlines(a, b, 'asc', true);
       }
       if (sortMode === 'ddl-desc') {
-        if (a.ddlHasTime && b.ddlHasTime) return b.ddl - a.ddl;
-        if (a.ddlHasTime) return -1;
-        if (b.ddlHasTime) return 1;
-        return 0;
+        return compareDeadlines(a, b, 'desc', true);
       }
       // default: 时间优先 → 优先级
       if (a.ddlHasTime && b.ddlHasTime) return a.ddl - b.ddl;
@@ -2268,7 +2407,7 @@
         meta.textContent = `${String(dd.getHours()).padStart(2,'0')}:${String(dd.getMinutes()).padStart(2,'0')}`;
       }
       if (t.repeat) {
-        meta.textContent += (meta.textContent ? ' · ' : '') + (t.repeat === 'daily' ? '每天' : '每周');
+        meta.textContent += (meta.textContent ? ' · ' : '') + ({ daily: '每天', weekly: '每周', custom: '自定义循环' }[t.repeat] || '');
       }
       if (meta.textContent) content.appendChild(meta);
 
@@ -2348,11 +2487,15 @@
     // 防抖
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(async () => {
-      const contentH = app.scrollHeight + 2;
+      const adding = app.classList.contains('collapsed-adding') || app.classList.contains('panel-adding');
+      const contentH = adding
+        ? app.querySelector('.header').offsetHeight + $('#add-panel-content').scrollHeight +
+          elPanel.querySelector('.add-foot').offsetHeight + 2
+        : app.scrollHeight + 2;
       const bounds = await window.api.getBounds();
       if (!bounds) return;
       // 添加面板模式（折叠或普通）：完全适应内容高度
-      if (app.classList.contains('collapsed-adding') || app.classList.contains('panel-adding')) {
+      if (adding) {
         const targetH = Math.max(100, Math.min(contentH, 700));
         if (Math.abs(targetH - bounds.height) > 5) {
           window.api.resizeHeight(targetH);
@@ -2373,14 +2516,14 @@
 
   function toggleCollapse() {
     const app = document.getElementById('app');
-    isCollapsed = !isCollapsed;
+    isCollapsed = !isCollapsed; savePreference({ collapsed: isCollapsed });
     app.classList.toggle('collapsed', isCollapsed);
     if (isCollapsed) {
       // 收起前先关闭添加面板
       if (panelOpen) closePanel();
       // 记住当前高度，收起为只留 header + 菜单透明区域
       window.api.getBounds().then(b => {
-        if (b) preCollapseHeight = b.height;
+        if (b) preCollapseHeight = Math.max(420, b.height);
         window.api.resizeHeight(COLLAPSED_WIN_H);
       });
       // 启用鼠标穿透：透明区域不拦截鼠标事件
@@ -2415,17 +2558,19 @@
   document.addEventListener('mouseenter', (e) => {
     if (!_mouseForwardActive) return;
     const el = e.target;
-    if (el.closest('.header') || el.closest('.sort-menu') || el.closest('.view-menu') || el.closest('.add-panel')) {
+    if (!(el instanceof Element)) return;
+    if (el.closest('.header') || el.closest('.settings-menu') || el.closest('.sort-menu') || el.closest('.view-menu') || el.closest('.add-panel')) {
       window.api.setIgnoreMouseEvents(false);
     }
   }, true);
   document.addEventListener('mouseleave', (e) => {
     if (!_mouseForwardActive) return;
     const el = e.target;
-    if (el.closest('.header') || el.closest('.sort-menu') || el.closest('.view-menu') || el.closest('.add-panel')) {
+    if (!(el instanceof Element)) return;
+    if (el.closest('.header') || el.closest('.settings-menu') || el.closest('.sort-menu') || el.closest('.view-menu') || el.closest('.add-panel')) {
       // 检查鼠标是否还在其他可交互元素上
       const related = e.relatedTarget;
-      if (!related || !(related.closest('.header') || related.closest('.sort-menu') || related.closest('.view-menu') || related.closest('.add-panel'))) {
+      if (!(related instanceof Element) || !(related.closest('.header') || related.closest('.settings-menu') || related.closest('.sort-menu') || related.closest('.view-menu') || related.closest('.add-panel'))) {
         window.api.setIgnoreMouseEvents(true, { forward: true });
       }
     }
@@ -2438,16 +2583,11 @@
   function updateViewBtn() {
     const btn = $('#btn-view');
     if (!btn) return;
-    if (isCollapsed) {
-      btn.textContent = '📌';
-      btn.classList.add('active');
-    } else if (viewMode === 'calendar') {
-      btn.textContent = '📅';
-      btn.classList.add('active');
-    } else {
-      btn.textContent = '📋';
-      btn.classList.remove('active');
-    }
+    const label = isCollapsed ? '折叠' : viewMode === 'calendar' ? '日历' : '列表';
+    btn.innerHTML = lineIcon(isCollapsed ? 'collapse' : viewMode === 'calendar' ? 'calendar' : 'list', 14);
+    btn.title = `视图：${label}`;
+    btn.setAttribute('aria-label', `切换视图，当前为${label}`);
+    btn.classList.toggle('active', isCollapsed || viewMode === 'calendar');
   }
 
   function updateViewMenuOptions() {
@@ -2464,7 +2604,7 @@
       calOpt.classList.toggle('active', !isCollapsed && viewMode === 'calendar');
     }
     if (colOpt) {
-      colOpt.textContent = isCollapsed ? '📌 展开' : '📌 折叠';
+      colOpt.textContent = isCollapsed ? '展开' : '折叠';
       colOpt.classList.toggle('active', isCollapsed);
     }
   }
@@ -2509,6 +2649,7 @@
 
   let activePopoverCleanups = [];
   function closePopover() {
+    closePickers();
     activePopoverCleanups.forEach(fn => fn());
     activePopoverCleanups = [];
     if (activePopover) {
@@ -2602,6 +2743,11 @@
       let editRepeat = todo.repeat || null;
       const selRepeat = popover.querySelector('.ip-sel-repeat');
       selRepeat.onchange = (ev) => { ev.stopPropagation(); editRepeat = selRepeat.value || null; };
+      if (todo.appleRepeatCustom) {
+        selRepeat.add(new Option('在苹果中设置', 'custom', true, true)); selRepeat.disabled = true;
+      }
+      const editRepeatPicker = createRepeatPicker(selRepeat);
+      activePopoverCleanups.push(() => editRepeatPicker.destroy());
 
       // 渲染迷你日历
       function renderEditCal() {

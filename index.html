@@ -20,26 +20,32 @@
       </div>
       <div class="header-right">
         <span class="header-stat" id="header-stat"></span>
-        <div class="sort-wrap" id="sort-wrap">
-          <button class="btn-sort" id="btn-sort" title="切换排序">默认</button>
-          <div class="sort-menu hidden" id="sort-menu">
-            <button class="sort-opt active" data-mode="default">默认</button>
-            <button class="sort-opt" data-mode="pri-asc">优先↑</button>
-            <button class="sort-opt" data-mode="pri-desc">优先↓</button>
-            <button class="sort-opt" data-mode="ddl-asc">时间↑</button>
-            <button class="sort-opt" data-mode="ddl-desc">时间↓</button>
-            <button class="sort-opt" data-mode="tag">分类</button>
-          </div>
+        <button class="btn-sort header-icon-button" id="btn-sort" title="排序：默认" aria-label="排序：默认" aria-haspopup="menu" aria-expanded="false" aria-controls="sort-menu"><span data-ui-icon="sort"></span></button>
+        <button class="btn-view header-icon-button" id="btn-view" title="视图：列表" aria-label="视图：列表" aria-haspopup="menu" aria-expanded="false" aria-controls="view-menu"><span data-ui-icon="list"></span></button>
+        <button class="btn-settings" id="btn-settings" title="设置" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-menu">设置</button>
+        <div class="settings-menu hidden" id="settings-menu" role="menu" aria-label="设置">
+          <div class="menu-caption"><span data-ui-icon="settings"></span>设置</div>
+          <button class="settings-item" id="open-general-settings" role="menuitem">通用</button>
+          <button class="settings-item" id="open-appearance-settings" role="menuitem">外观</button>
+          <button class="settings-item" id="open-sync-settings" role="menuitem">数据与提醒</button>
+          <button class="settings-item" id="open-about-settings" role="menuitem">关于不记Todo</button>
         </div>
-        <div class="view-wrap" id="view-wrap">
-          <button class="btn-view" id="btn-view" title="切换视图">📋</button>
-          <div class="view-menu hidden" id="view-menu">
-            <button class="view-opt" data-mode="list">📋 列表</button>
-            <button class="view-opt" data-mode="calendar">📅 日历</button>
-            <button class="view-opt" data-mode="collapse">📌 折叠</button>
-          </div>
+        <div class="sort-menu header-menu hidden" id="sort-menu" role="menu" aria-label="排序方式">
+          <div class="menu-caption">排序</div>
+          <button class="sort-opt active" data-mode="default">默认</button>
+          <button class="sort-opt" data-mode="pri-asc">优先↑</button>
+          <button class="sort-opt" data-mode="pri-desc">优先↓</button>
+          <button class="sort-opt" data-mode="ddl-asc" title="日期从近到远；同一天具体时间从早到晚，全天最后；无截止日期最后">时间↑</button>
+          <button class="sort-opt" data-mode="ddl-desc" title="日期从远到近；同一天具体时间从晚到早，全天最后；无截止日期最后">时间↓</button>
+          <button class="sort-opt" data-mode="tag">分类</button>
         </div>
-        <button class="btn-add" id="btn-add" title="添加待办">
+        <div class="view-menu header-menu hidden" id="view-menu" role="menu" aria-label="视图">
+          <div class="menu-caption">视图</div>
+          <button class="view-opt" data-mode="list">列表</button>
+          <button class="view-opt" data-mode="calendar">日历</button>
+          <button class="view-opt" data-mode="collapse">折叠</button>
+        </div>
+        <button class="btn-add" id="btn-add" title="添加待办" aria-label="添加待办">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M7 1.5v11M1.5 7h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
@@ -49,21 +55,22 @@
 
     <!-- 添加面板 -->
     <div class="add-panel hidden" id="add-panel">
+      <div class="add-panel-content" id="add-panel-content">
       <input type="text" id="todo-input" placeholder="输入待办内容..." />
       <div class="link-preview hidden" id="link-preview"></div>
       <!-- 功能按钮 -->
       <div class="opt-btns">
         <button class="opt-btn" id="opt-pri">
-          <span class="opt-icon">◉</span> <span id="pri-text">普通</span> ▾
+          <span class="opt-icon" data-ui-icon="priority"></span> <span id="pri-text">普通</span> ▾
         </button>
         <button class="opt-btn" id="opt-ddl">
-          <span class="opt-icon">◷</span> 截止时间
+          <span class="opt-icon" data-ui-icon="calendar"></span> 截止时间
         </button>
         <button class="opt-btn" id="opt-tag">
-          <span class="opt-icon">⊞</span> <span id="tag-text">标签</span>
+          <span class="opt-icon" data-ui-icon="tag"></span> <span id="tag-text">标签</span>
         </button>
         <button class="opt-btn" id="opt-note">
-          <span class="opt-icon">✎</span> 备注
+          <span class="opt-icon" data-ui-icon="note"></span> 备注
         </button>
       </div>
       <!-- 展开：优先级选择（浮层） -->
@@ -108,7 +115,8 @@
         <input type="text" id="tag-input" placeholder="输入标签名..." class="tag-inp" />
         <div class="tag-suggestions" id="tag-suggestions"></div>
       </div>
-      <!-- 底部操作 -->
+      </div>
+      <!-- 底部操作独立于滚动内容，始终贴合面板底部 -->
       <div class="add-foot">
         <button class="foot-btn cancel" id="btn-cancel">取消</button>
         <button class="foot-btn confirm" id="btn-confirm">添加 ↵</button>
@@ -159,6 +167,8 @@
     <div class="edit-popup" id="edit-popup"></div>
   </div>
 
+  <script src="todo-time.js"></script>
+  <script src="color-utils.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

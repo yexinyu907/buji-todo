@@ -1,16 +1,24 @@
 {
   "name": "buji-todo",
-  "version": "0.6.2",
+  "version": "0.8.4",
   "description": "不记Todo - 桌面悬浮置顶待办工具",
   "main": "main.js",
   "scripts": {
+    "test": "node --test tests/*.test.js",
     "start": "electron .",
     "dev": "electron . --enable-logging",
     "pack": "electron-builder --mac --dir",
-    "dist": "electron-builder --mac"
+    "dist": "electron-builder --mac",
+    "build:native": "node scripts/build-native.js",
+    "prestart": "node scripts/build-native.js",
+    "predev": "node scripts/build-native.js"
   },
-  "keywords": ["todo", "desktop", "always-on-top"],
-  "author": "yexinyu <y1416154606@163.com>",
+  "keywords": [
+    "todo",
+    "desktop",
+    "always-on-top"
+  ],
+  "author": "yexinyu907",
   "license": "MIT",
   "type": "commonjs",
   "build": {
@@ -24,33 +32,50 @@
           "target": "zip",
           "arch": "universal"
         }
-      ]
-    },
-    "win": {
-      "icon": "build/icon.png",
-      "target": [
-        {
-          "target": "zip",
-          "arch": ["x64", "arm64"]
-        }
-      ]
+      ],
+      "extendInfo": {
+        "NSRemindersUsageDescription": "用于将你选择的提醒清单与不记Todo双向同步。确认合并后才会写入任务。",
+        "NSRemindersFullAccessUsageDescription": "用于将你选择的提醒清单与不记Todo双向同步。确认合并后才会写入任务。"
+      },
+      "minimumSystemVersion": "12.0"
     },
     "files": [
       "main.js",
       "preload.js",
       "index.html",
       "app.js",
+      "todo-time.js",
       "style.css",
       "cat-reminder.html",
       "assets/**/*",
-      "build/icon.png"
+      "build/icon.png",
+      "apple-reminders-bridge.js",
+      "apple-sync-engine.js",
+      "apple-sync-service.js",
+      "sync-settings.html",
+      "sync-settings.css",
+      "sync-settings.js",
+      "native/build/*.node",
+      "preferences-store.js",
+      "backup-store.js",
+      "zip-format.js",
+      "update-check.js",
+      "settings-page.js",
+      "color-utils.js",
+      "reminder-avatar.js",
+      "reminder-gallery.js"
     ],
     "directories": {
       "output": "dist"
-    }
+    },
+    "beforePack": "scripts/before-pack.js",
+    "asarUnpack": [
+      "native/build/*.node"
+    ]
   },
   "devDependencies": {
     "electron": "^41.5.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "node-api-headers": "1.9.0"
   }
 }

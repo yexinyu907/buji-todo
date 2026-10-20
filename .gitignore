@@ -3,6 +3,7 @@ node_modules/
 
 # 打包产物（太大了，别人可以自己打包）
 dist/
+native/build/
 
 # macOS 系统文件
 .DS_Store
@@ -20,3 +21,30 @@ PRD.md
 PRD_V2.md
 sort-logic-doc.md
 *.citadelmd
+
+# 本机交接与产品讨论，不发布
+/docs-local/
+/PROJECT_HANDOVER.md
+/PRD-apple-reminders-sync.md
+
+# 个人运行数据与导出文件
+/buji-data.json
+/apple-sync.json
+/settings.json
+/images/
+/reminder-gallery/
+/reminder-avatar.png
+/sync-backups/
+/backups/
+*.zip
+*.dmg
+*.app/
+
+# 登录信息、私钥和签名材料
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision

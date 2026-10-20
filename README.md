@@ -1,61 +1,72 @@
+<p align="center"><img src="build/icon.png" width="96" alt="不记Todo 图标"></p>
+
 # 不记Todo
 
-> 一个贴在桌面上的智能便利贴 —— 不需要打开、不需要切换、抬眼就能看到，一键就能记录。
+贴在 Mac 桌面上的轻量待办。随手记下，抬眼看见。
 
-## 下载使用
+**[下载最新版 Mac 安装包](https://github.com/yexinyu907/buji-todo/releases/latest)** · [更新记录](CHANGELOG.md) · [反馈问题](https://github.com/yexinyu907/buji-todo/issues)
 
-**普通用户直接下载即可，不需要懂代码：**
+## 下载与安装
 
-- **Mac 用户**：下载 [不记Todo-0.6.2-universal-mac.zip](https://github.com/yexinyu907/buji-todo/releases)，解压后双击打开即可
-- **Windows 用户**：下载 [不记Todo-0.6.2-win.zip](https://github.com/yexinyu907/buji-todo/releases)，解压后双击运行，无需安装
+当前版本 **0.8.4**，支持 **macOS 12 及以上**，Universal 安装包同时包含 Apple Silicon 和 Intel 架构。
 
-> 如果 Releases 页面还没有文件，可以联系作者获取安装包。
+1. 下载 [buji-todo-0.8.4-mac-universal.zip](https://github.com/yexinyu907/buji-todo/releases/download/v0.8.4/buji-todo-0.8.4-mac-universal.zip)。
+2. 解压后，将「不记Todo.app」拖入「应用程序」。
+3. 打开应用，点击右上角「＋」开始记录。更新已有版本时，先退出应用再替换，原有待办保存在独立的数据目录中。
 
-## 功能特色
+当前公开包使用本地签名，尚未经过 Apple 开发者签名和公证。首次打开可能被 macOS 拦截；请确认下载来源，按系统提示在「系统设置 → 隐私与安全性」中允许打开。
 
-- 🖥️ **桌面常驻悬浮** — 开机自启、始终置顶，像便利贴一样贴在桌面
-- ⚡ **极速添加** — 点击加号，输入文字，回车完成，3秒搞定
-- 🐱 **小猫DDL提醒** — 到点弹出可爱小猫提醒你，支持「完成」和「稍后提醒」
-- 🎡 **时间滚轮选择器** — 滑动选择时间，流畅自然
-- 📅 **日历视图** — 月历鸟瞰 + 日期详情，看清时间分布
-- 🔗 **智能链接识别** — 粘贴 URL 自动显示标题
-- 🔁 **重复待办** — 每天/每周自动出现，完成后次日重置
-- 🎨 **优先级颜色** — 紧急红色、重要橙色、普通蓝色
-- 💬 **智能问候语** — 根据时段和任务量显示不同暖心文案
-- 🔒 **零账号零网络** — 纯本地存储，隐私安全
+## 能做什么
 
-## 开发者指南
+- **桌面常驻**：置顶、折叠，支持登录时启动和显示／隐藏窗口快捷键。
+- **快速记录**：优先级、日期和时刻、每天／每周循环、标签、备注、图片与链接。
+- **列表与日历**：按优先级、截止时间或标签整理；同一天的全天任务排在具体时刻之后，无日期任务排在最后。
+- **苹果提醒事项同步**：选择手机常用的 iCloud 清单，确认首次合并后自动双向同步。
+- **不记Todo提醒**：到点弹窗，可完成或稍后提醒；默认六只小猫，也可在小图库中上传多张形象，每次随机展示。
+- **按习惯调整外观**：字号、卡片间距、透明度、浅色预设与自定义颜色。
+- **文件导入与导出**：ZIP 包含全部未完成、已完成待办及图片。导入前确认替换，导入后暂停苹果同步，核对后再连接。
 
-如果你想自己修改代码或从源码运行：
+## 和 iPhone 一起用
+
+在「设置 → 数据与提醒」连接苹果提醒事项，选择同一 Apple 账号下的 iCloud 清单。首次仅合并未完成任务，同名任务由你决定合并或独立保留。
+
+之后新增、编辑、完成和删除会自动交换。两边同时修改同一字段时，应用会请你确认。Mac 上的不记Todo需要保持运行，手机与 Mac 之间的传播由 iCloud 完成。
+
+苹果通知继续由系统负责；同步任务是否额外显示不记Todo弹窗，可在设置中选择。卡片上的铃铛控制单条任务的本机弹窗。
+
+详见 [提醒事项同步说明](APPLE_SYNC_GUIDE.md)。
+
+## 数据与隐私
+
+不需要注册不记Todo账号，也没有额外的同步服务器。未连接苹果提醒事项时，待办保存在这台 Mac；连接后，所选清单的同步字段通过苹果提醒事项进入你的 iCloud。
+
+本地数据位于 `~/Library/Application Support/buji-todo/`。上传的提醒形象只保存为本机副本，不修改原图。源码和安装包不包含开发者的待办、图片、图库、账号凭据或本机配置。
+
+应用只在获取链接标题、手动检查 GitHub 更新、打开外部链接及使用苹果同步等相应功能时联网。不会使用 AI 读取或判断你的任务。
+
+## 从源码运行
+
+需要 macOS、Node.js 22 或更高版本，以及 Xcode Command Line Tools。
 
 ```bash
-# 1. 克隆仓库
 git clone https://github.com/yexinyu907/buji-todo.git
 cd buji-todo
-
-# 2. 安装依赖
-npm install
-
-# 3. 运行
+npm ci
 npm start
-
-# 4. 打包（可选）
-# Mac:
-npx electron-builder --mac
-# Windows:
-npx electron-builder --win
 ```
 
-## 技术栈
+首次运行会编译苹果提醒事项的原生连接模块。如未安装命令行开发工具，可先运行 `xcode-select --install`。
 
-- Electron（桌面应用框架）
-- 纯原生 HTML/CSS/JavaScript（无前端框架）
-- 本地 JSON 文件存储
+```bash
+npm test          # 自动化测试
+npm run pack     # 构建本机架构的 .app
+npm run dist     # 构建 Universal Mac ZIP
+```
 
-## 项目背景
+界面使用原生 HTML、CSS、JavaScript，桌面框架为 Electron；任务使用本地 JSON 和图片文件，苹果同步通过 macOS EventKit 实现。当前自动化界面验证在 Apple Silicon Mac 完成，Intel 架构已包含在 Universal 包中，尚未进行 Intel 实机验证。
 
-这是一次 **非程序员通过 AI（Vibe Coding）从零做出可分发产品** 的实验。从需求定义、开发、调试到打包分发，全程由产品经理与 AI（CatDesk）对话协作完成。
+## 项目
 
-## 作者
+这是一个通过 Vibe Coding 持续迭代的小项目，目标是让记录待办足够轻、桌面提示足够直观。欢迎通过 [Issues](https://github.com/yexinyu907/buji-todo/issues) 提交建议；反馈时请隐去个人任务、截图中的隐私信息和账号凭据。
 
-yexinyu · y1416154606@163.com
+作者：[yexinyu907](https://github.com/yexinyu907)
